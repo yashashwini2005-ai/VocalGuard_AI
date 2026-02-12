@@ -1,23 +1,23 @@
-import os
 import base64
+import os
 
-INPUT_FOLDER = "evaluation_data/ai"   # change to real if needed
-OUTPUT_FOLDER = "base64_files"
+# 🔹 Change this to your actual file path
+file_path = "dataset/real/61/70968/61-70968-0000.flac"
 
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+# 🔹 Output file name
+output_file = "real_base64.txt"
 
-for file_name in os.listdir(INPUT_FOLDER):
-    if file_name.endswith(".mp3") or file_name.endswith(".wav"):
-        file_path = os.path.join(INPUT_FOLDER, file_name)
+# Check if file exists
+if not os.path.exists(file_path):
+    print("File not found:", file_path)
+    exit()
 
-        with open(file_path, "rb") as audio_file:
-            encoded_string = base64.b64encode(audio_file.read()).decode("utf-8")
+with open(file_path, "rb") as audio_file:
+    encoded_string = base64.b64encode(audio_file.read()).decode("utf-8")
 
-        output_file = os.path.join(OUTPUT_FOLDER, file_name + ".txt")
+# Save to txt file
+with open(output_file, "w") as f:
+    f.write(encoded_string)
 
-        with open(output_file, "w") as f:
-            f.write(encoded_string)
+print("Base64 saved to:", output_file)
 
-        print(f"Converted: {file_name}")
-
-print("\nAll files converted successfully!")
