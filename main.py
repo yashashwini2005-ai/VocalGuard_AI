@@ -48,7 +48,7 @@ VALID_API_KEYS = {os.getenv("PRODUCTION_API_KEY", DEFAULT_KEY): "Production_User
 # ---------------------------
 
 class DetectionRequest(BaseModel):
-    language: English
+    language: str
     audioFormat: str
     audioBase64: str
 
