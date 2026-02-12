@@ -6,13 +6,13 @@ import numpy as np
 import soundfile as sf
 import joblib
 
-from fastapi import FastAPI, Header, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
-from typing import Optional
 
 # ---------------------------
-# Load Trained ML Model
+# Load ML Model
 # ---------------------------
 
 model = joblib.load("voice_model.pkl")
@@ -37,14 +37,22 @@ app.add_middleware(
 )
 
 # ---------------------------
-# API Key Configuration
+# API Key Setup (Simple & Stable)
 # ---------------------------
 
-DEFAULT_KEY = "sk_live_vocalguard_2026"
-VALID_API_KEYS = {os.getenv("PRODUCTION_API_KEY", DEFAULT_KEY): "Production_User"}
+API_KEY = "sk_live_vocalguard_2026"
+
+api_key_header = APIKeyHeader(name="x-api-key")
+
+def verify_api_key(api_key: str):
+    if api_key != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail={"status": "error", "message": "Invalid API key"}
+        )
 
 # ---------------------------
-# Request & Response Models
+# Request / Response Models
 # ---------------------------
 
 class DetectionRequest(BaseModel):
@@ -60,20 +68,6 @@ class DetectionResponse(BaseModel):
     confidenceScore: float
     explanation: str
 
-
-# ---------------------------
-# API Key Verification
-# ---------------------------
-
-async def verify_api_key(x_api_key: Optional[str] = Header(None)):
-    if not x_api_key or x_api_key not in VALID_API_KEYS:
-        raise HTTPException(
-            status_code=401,
-            detail={"status": "error", "message": "Invalid API key"}
-        )
-    return x_api_key
-
-
 # ---------------------------
 # Health Endpoint
 # ---------------------------
@@ -86,49 +80,40 @@ def health_check():
         "mode": "Buildathon Final Version"
     }
 
-
 # ---------------------------
-# Feature Extraction Function
+# Feature Extraction
 # ---------------------------
 
 def extract_features(y, sr):
-    # Pitch features
     pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
     pitch_values = pitches[magnitudes > np.median(magnitudes)]
     pitch_mean = np.mean(pitch_values) if len(pitch_values) > 0 else 0
     pitch_var = np.var(pitch_values) if len(pitch_values) > 0 else 0
 
-    # MFCC
     mfcc = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13))
-
-    # Spectral centroid
     centroid = np.mean(librosa.feature.spectral_centroid(y=y, sr=sr))
-
-    # RMS energy variation
     rms = np.std(librosa.feature.rms(y=y))
-
-    # Zero Crossing Rate
     zcr = np.mean(librosa.feature.zero_crossing_rate(y))
 
     return [pitch_mean, pitch_var, mfcc, centroid, rms, zcr]
-
 
 # ---------------------------
 # Voice Detection Endpoint
 # ---------------------------
 
 @app.post("/api/voice-detection", response_model=DetectionResponse)
-async def detect_voice(request: DetectionRequest, apiKey: str = Depends(verify_api_key)):
-    try:
-        # 1️⃣ Decode Base64
-        try:
-            audio_bytes = base64.b64decode(request.audioBase64)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid Base64 string")
+async def detect_voice(
+    request: DetectionRequest,
+    api_key: str = Security(api_key_header)
+):
+    verify_api_key(api_key)
 
+    try:
+        # Decode Base64
+        audio_bytes = base64.b64decode(request.audioBase64)
         audio_stream = io.BytesIO(audio_bytes)
 
-        # 2️⃣ Load Audio
+        # Load Audio
         try:
             y, sr = librosa.load(audio_stream, sr=16000)
         except Exception:
@@ -146,16 +131,18 @@ async def detect_voice(request: DetectionRequest, apiKey: str = Depends(verify_a
 
         y = librosa.util.normalize(y)
 
-        # 3️⃣ Extract Features
+        # Feature Extraction
         features = extract_features(y, sr)
         features_scaled = scaler.transform([features])
 
-        # 4️⃣ ML Prediction
+        # ML Prediction
         prediction = model.predict(features_scaled)[0]
-        probability = model.predict_proba(features_scaled)[0][prediction]
+        probabilities = model.predict_proba(features_scaled)[0]
+
+        probability = float(probabilities[prediction])
+        confidence = round(probability, 3)
 
         is_ai = prediction == 1
-        confidence = round(float(probability), 3)
 
         explanation = (
             "ML model detected synthetic acoustic patterns."
@@ -176,7 +163,6 @@ async def detect_voice(request: DetectionRequest, apiKey: str = Depends(verify_a
             status_code=400,
             detail={"status": "error", "message": str(e)}
         )
-
 
 # ---------------------------
 # Run Server
