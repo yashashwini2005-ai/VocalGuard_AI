@@ -4,18 +4,30 @@ import os
 import librosa
 import numpy as np
 import soundfile as sf
+import joblib
+
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
+# ---------------------------
+# Load Trained ML Model
+# ---------------------------
+
+model = joblib.load("voice_model.pkl")
+scaler = joblib.load("scaler.pkl")
+
+# ---------------------------
+# FastAPI App
+# ---------------------------
+
 app = FastAPI(
     title="VocalGuard AI Detection API",
-    description="Voice authenticity detection service (Phase 1 - Adaptive Heuristic Engine)",
-    version="2.1.0"
+    description="Multilingual AI-Generated Voice Detection System",
+    version="3.0.0"
 )
 
-# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,10 +36,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------
 # API Key Configuration
-DEFAULT_KEY = "sk_live_yashashwini_2026"
-VALID_API_KEYS = {os.getenv("PRODUCTION_API_KEY", DEFAULT_KEY): "Production_User"}
+# ---------------------------
 
+DEFAULT_KEY = "sk_live_vocalguard_2026"
+VALID_API_KEYS = {os.getenv("PRODUCTION_API_KEY", DEFAULT_KEY): "Production_User"}
 
 # ---------------------------
 # Request & Response Models
@@ -68,10 +82,35 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None)):
 def health_check():
     return {
         "status": "online",
-        "engine": "Neural-V3 Adaptive Heuristic",
-        "python_version": "3.10+",
-        "mode": "Buildathon Demo"
+        "engine": "Logistic Regression + Acoustic Forensics",
+        "mode": "Buildathon Final Version"
     }
+
+
+# ---------------------------
+# Feature Extraction Function
+# ---------------------------
+
+def extract_features(y, sr):
+    # Pitch features
+    pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
+    pitch_values = pitches[magnitudes > np.median(magnitudes)]
+    pitch_mean = np.mean(pitch_values) if len(pitch_values) > 0 else 0
+    pitch_var = np.var(pitch_values) if len(pitch_values) > 0 else 0
+
+    # MFCC
+    mfcc = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13))
+
+    # Spectral centroid
+    centroid = np.mean(librosa.feature.spectral_centroid(y=y, sr=sr))
+
+    # RMS energy variation
+    rms = np.std(librosa.feature.rms(y=y))
+
+    # Zero Crossing Rate
+    zcr = np.mean(librosa.feature.zero_crossing_rate(y))
+
+    return [pitch_mean, pitch_var, mfcc, centroid, rms, zcr]
 
 
 # ---------------------------
@@ -96,7 +135,6 @@ async def detect_voice(request: DetectionRequest, apiKey: str = Depends(verify_a
             audio_stream.seek(0)
             data, samplerate = sf.read(audio_stream)
 
-            # Convert stereo to mono if needed
             if len(data.shape) > 1:
                 data = np.mean(data, axis=1)
 
@@ -106,47 +144,23 @@ async def detect_voice(request: DetectionRequest, apiKey: str = Depends(verify_a
         if len(y) == 0:
             raise Exception("Audio file is empty")
 
-        # Normalize
         y = librosa.util.normalize(y)
 
-        # 3️⃣ Feature Extraction
-        spectral_flatness = float(np.mean(librosa.feature.spectral_flatness(y=y)))
-        zcr = float(np.mean(librosa.feature.zero_crossing_rate(y=y)))
-        spectral_bandwidth = float(np.mean(librosa.feature.spectral_bandwidth(y=y, sr=sr)))
-        mfcc = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13))
+        # 3️⃣ Extract Features
+        features = extract_features(y, sr)
+        features_scaled = scaler.transform([features])
 
-        # Debug logs (Railway logs will show these)
-        print("Spectral Flatness:", spectral_flatness)
-        print("Zero Crossing Rate:", zcr)
-        print("Spectral Bandwidth:", spectral_bandwidth)
-        print("MFCC Mean:", mfcc)
+        # 4️⃣ ML Prediction
+        prediction = model.predict(features_scaled)[0]
+        probability = model.predict_proba(features_scaled)[0][prediction]
 
-        # 4️⃣ Adaptive Weighted Scoring System
-        ai_score = 0.0
-
-        if spectral_flatness < 0.08:
-            ai_score += 0.3
-
-        if zcr < 0.1:
-            ai_score += 0.3
-
-        if spectral_bandwidth < 2500:
-            ai_score += 0.2
-
-        if mfcc > -200:
-            ai_score += 0.2
-
-        # Final Decision
-        is_ai = ai_score >= 0.6
-
-        # 5️⃣ Confidence Calculation
-        confidence = round(0.65 + ai_score * 0.35, 3)
-        confidence = min(confidence, 0.995)
+        is_ai = prediction == 1
+        confidence = round(float(probability), 3)
 
         explanation = (
-            "Synthetic spectral smoothing, reduced micro-variations and AI-like acoustic consistency detected."
+            "ML model detected synthetic acoustic patterns."
             if is_ai else
-            "Natural prosodic fluctuations, organic vocal artifacts and human acoustic dynamics detected."
+            "ML model detected natural human vocal characteristics."
         )
 
         return {
