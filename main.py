@@ -12,11 +12,13 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
 # ---------------------------
-# Load ML Model
+# Load RandomForest Model
 # ---------------------------
 
 model = joblib.load("voice_model.pkl")
 scaler = joblib.load("scaler.pkl")
+
+SAMPLE_RATE = 16000
 
 # ---------------------------
 # FastAPI App
@@ -24,8 +26,8 @@ scaler = joblib.load("scaler.pkl")
 
 app = FastAPI(
     title="VocalGuard AI Detection API",
-    description="Multilingual AI-Generated Voice Detection System",
-    version="3.0.0"
+    description="RandomForest-Based AI Voice Detection System",
+    version="5.0.0"
 )
 
 app.add_middleware(
@@ -37,7 +39,7 @@ app.add_middleware(
 )
 
 # ---------------------------
-# API Key Setup (Simple & Stable)
+# API Key Setup
 # ---------------------------
 
 API_KEY = "sk_live_vocalguard_2026"
@@ -76,26 +78,35 @@ class DetectionResponse(BaseModel):
 def health_check():
     return {
         "status": "online",
-        "engine": "Logistic Regression + Acoustic Forensics",
-        "mode": "Buildathon Final Version"
+        "engine": "RandomForest Acoustic Model",
+        "mode": "Production Version"
     }
 
 # ---------------------------
-# Feature Extraction
+# Feature Extraction (Same as Training)
 # ---------------------------
 
 def extract_features(y, sr):
-    pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
-    pitch_values = pitches[magnitudes > np.median(magnitudes)]
-    pitch_mean = np.mean(pitch_values) if len(pitch_values) > 0 else 0
-    pitch_var = np.var(pitch_values) if len(pitch_values) > 0 else 0
 
-    mfcc = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13))
-    centroid = np.mean(librosa.feature.spectral_centroid(y=y, sr=sr))
-    rms = np.std(librosa.feature.rms(y=y))
+    # MFCC
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
+    mfcc_mean = np.mean(mfcc.T, axis=0)
+
+    # Chroma
+    chroma = librosa.feature.chroma_stft(y=y, sr=sr)
+    chroma_mean = np.mean(chroma.T, axis=0)
+
+    # Spectral Contrast
+    spectral_contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
+    contrast_mean = np.mean(spectral_contrast.T, axis=0)
+
+    # Zero Crossing Rate
     zcr = np.mean(librosa.feature.zero_crossing_rate(y))
 
-    return [pitch_mean, pitch_var, mfcc, centroid, rms, zcr]
+    # RMS Energy
+    rms = np.mean(librosa.feature.rms(y=y))
+
+    return np.hstack([mfcc_mean, chroma_mean, contrast_mean, zcr, rms])
 
 # ---------------------------
 # Voice Detection Endpoint
@@ -115,7 +126,7 @@ async def detect_voice(
 
         # Load Audio
         try:
-            y, sr = librosa.load(audio_stream, sr=16000)
+            y, sr = librosa.load(audio_stream, sr=SAMPLE_RATE)
         except Exception:
             audio_stream.seek(0)
             data, samplerate = sf.read(audio_stream)
@@ -123,31 +134,36 @@ async def detect_voice(
             if len(data.shape) > 1:
                 data = np.mean(data, axis=1)
 
-            y = librosa.resample(data, orig_sr=samplerate, target_sr=16000)
-            sr = 16000
+            y = librosa.resample(data, orig_sr=samplerate, target_sr=SAMPLE_RATE)
+            sr = SAMPLE_RATE
 
         if len(y) == 0:
             raise Exception("Audio file is empty")
 
         y = librosa.util.normalize(y)
 
-        # Feature Extraction
+        # Extract features
         features = extract_features(y, sr)
         features_scaled = scaler.transform([features])
 
-        # ML Prediction
-        prediction = model.predict(features_scaled)[0]
+        # Predict probabilities
         probabilities = model.predict_proba(features_scaled)[0]
+        ai_probability = probabilities[1]
 
-        probability = float(probabilities[prediction])
-        confidence = round(probability, 3)
+        # Threshold tuning (adjust if needed)
+        threshold = 0.6
 
-        is_ai = prediction == 1
+        is_ai = ai_probability > threshold
+
+        confidence = round(
+            ai_probability if is_ai else (1 - ai_probability),
+            3
+        )
 
         explanation = (
-            "ML model detected synthetic acoustic patterns."
+            "Model detected synthetic acoustic patterns."
             if is_ai else
-            "ML model detected natural human vocal characteristics."
+            "Model detected natural human vocal characteristics."
         )
 
         return {

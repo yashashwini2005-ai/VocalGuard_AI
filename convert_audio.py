@@ -1,23 +1,24 @@
 import base64
 import os
 
-# 🔹 Change this to your actual file path
-file_path = "dataset/real/61/70968/61-70968-0000.flac"
+folder = "dataset/Hindi/Non Human"
 
-# 🔹 Output file name
-output_file = "real_base64.txt"
+files = os.listdir(folder)
 
-# Check if file exists
-if not os.path.exists(file_path):
-    print("File not found:", file_path)
+if not files:
+    print("No files found in folder.")
     exit()
+
+file_path = os.path.join(folder, files[0])
+
+print("Using file:", file_path)
+
+output_file = "real_base64.txt"
 
 with open(file_path, "rb") as audio_file:
     encoded_string = base64.b64encode(audio_file.read()).decode("utf-8")
 
-# Save to txt file
 with open(output_file, "w") as f:
     f.write(encoded_string)
 
-print("Base64 saved to:", output_file)
-
+print("Base64 saved successfully to:", output_file)

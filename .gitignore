@@ -1,7 +1,19 @@
-dataset/
-test-clean/
-*.tar.gz
+# Python
 __pycache__/
 *.pyc
-venv/
+
+# Dataset
+dataset/
+*.zip
+
+# Model files
+*.pkl
+*.h5
+
+# Generated files
+*.txt
+
+# OS files
+.DS_Store
+Thumbs.db
 
