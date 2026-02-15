@@ -1,6 +1,15 @@
+# =========================
 # Python
+# =========================
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual Environment
+venv/
+.venv/
 
 # Dataset
 dataset/
@@ -10,10 +19,13 @@ dataset/
 *.pkl
 *.h5
 
-# Generated files
+# Generated / Temp files
 *.txt
 
 # OS files
 .DS_Store
 Thumbs.db
+
+# VS Code
+.vscode/
 

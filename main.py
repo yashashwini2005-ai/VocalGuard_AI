@@ -11,23 +11,34 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
-# ---------------------------
-# Load RandomForest Model
-# ---------------------------
+# =====================================
+# CONFIG (MUST MATCH TRAINING EXACTLY)
+# =====================================
 
-model = joblib.load("voice_model.pkl")
-scaler = joblib.load("scaler.pkl")
+SAMPLE_RATE = 22050
+FIXED_DURATION = 4   # MUST MATCH train_model.py
 
-SAMPLE_RATE = 16000
+MODEL_PATH = "english_voice_model.pkl"
+SCALER_PATH = "english_scaler.pkl"
 
-# ---------------------------
-# FastAPI App
-# ---------------------------
+# =====================================
+# LOAD MODEL + SCALER
+# =====================================
+
+if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
+    raise Exception("Model files not found. Run train_model.py first.")
+
+model = joblib.load(MODEL_PATH)
+scaler = joblib.load(SCALER_PATH)
+
+# =====================================
+# FASTAPI APP
+# =====================================
 
 app = FastAPI(
     title="VocalGuard AI Detection API",
     description="RandomForest-Based AI Voice Detection System",
-    version="5.0.0"
+    version="10.0.0"
 )
 
 app.add_middleware(
@@ -38,12 +49,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------
-# API Key Setup
-# ---------------------------
+# =====================================
+# API KEY SECURITY
+# =====================================
 
 API_KEY = "sk_live_vocalguard_2026"
-
 api_key_header = APIKeyHeader(name="x-api-key")
 
 def verify_api_key(api_key: str):
@@ -53,9 +63,9 @@ def verify_api_key(api_key: str):
             detail={"status": "error", "message": "Invalid API key"}
         )
 
-# ---------------------------
-# Request / Response Models
-# ---------------------------
+# =====================================
+# REQUEST / RESPONSE MODELS
+# =====================================
 
 class DetectionRequest(BaseModel):
     language: str
@@ -70,47 +80,64 @@ class DetectionResponse(BaseModel):
     confidenceScore: float
     explanation: str
 
-# ---------------------------
-# Health Endpoint
-# ---------------------------
+# =====================================
+# HEALTH CHECK
+# =====================================
 
 @app.get("/health")
 def health_check():
     return {
         "status": "online",
-        "engine": "RandomForest Acoustic Model",
-        "mode": "Production Version"
+        "engine": "RandomForest + MFCC + Delta + Spectral + Contrast + Tonnetz",
+        "mode": "English Production Model (218 Features)"
     }
 
-# ---------------------------
-# Feature Extraction (Same as Training)
-# ---------------------------
+# =====================================
+# FEATURE EXTRACTION (MUST MATCH TRAINING)
+# =====================================
 
 def extract_features(y, sr):
 
-    # MFCC
+    y, _ = librosa.effects.trim(y)
+
+    required_length = SAMPLE_RATE * FIXED_DURATION
+    if len(y) < required_length:
+        y = np.pad(y, (0, required_length - len(y)))
+    else:
+        y = y[:required_length]
+
+    y = librosa.util.normalize(y)
+
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
-    mfcc_mean = np.mean(mfcc.T, axis=0)
+    delta = librosa.feature.delta(mfcc)
 
-    # Chroma
+    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
+    spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)
+    spectral_bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)
+
+    zero_crossing = librosa.feature.zero_crossing_rate(y)
     chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-    chroma_mean = np.mean(chroma.T, axis=0)
 
-    # Spectral Contrast
     spectral_contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
-    contrast_mean = np.mean(spectral_contrast.T, axis=0)
+    tonnetz = librosa.feature.tonnetz(y=y, sr=sr)
 
-    # Zero Crossing Rate
-    zcr = np.mean(librosa.feature.zero_crossing_rate(y))
+    features = np.hstack([
+        np.mean(mfcc.T, axis=0), np.std(mfcc.T, axis=0),
+        np.mean(delta.T, axis=0), np.std(delta.T, axis=0),
+        np.mean(spectral_centroid.T, axis=0), np.std(spectral_centroid.T, axis=0),
+        np.mean(spectral_rolloff.T, axis=0), np.std(spectral_rolloff.T, axis=0),
+        np.mean(spectral_bandwidth.T, axis=0), np.std(spectral_bandwidth.T, axis=0),
+        np.mean(zero_crossing.T, axis=0), np.std(zero_crossing.T, axis=0),
+        np.mean(chroma.T, axis=0), np.std(chroma.T, axis=0),
+        np.mean(spectral_contrast.T, axis=0), np.std(spectral_contrast.T, axis=0),
+        np.mean(tonnetz.T, axis=0), np.std(tonnetz.T, axis=0),
+    ])
 
-    # RMS Energy
-    rms = np.mean(librosa.feature.rms(y=y))
+    return features
 
-    return np.hstack([mfcc_mean, chroma_mean, contrast_mean, zcr, rms])
-
-# ---------------------------
-# Voice Detection Endpoint
-# ---------------------------
+# =====================================
+# VOICE DETECTION ENDPOINT
+# =====================================
 
 @app.post("/api/voice-detection", response_model=DetectionResponse)
 async def detect_voice(
@@ -124,7 +151,7 @@ async def detect_voice(
         audio_bytes = base64.b64decode(request.audioBase64)
         audio_stream = io.BytesIO(audio_bytes)
 
-        # Load Audio
+        # Load audio safely
         try:
             y, sr = librosa.load(audio_stream, sr=SAMPLE_RATE)
         except Exception:
@@ -140,19 +167,17 @@ async def detect_voice(
         if len(y) == 0:
             raise Exception("Audio file is empty")
 
-        y = librosa.util.normalize(y)
-
         # Extract features
         features = extract_features(y, sr)
+
+        # Scale
         features_scaled = scaler.transform([features])
 
-        # Predict probabilities
+        # Predict
         probabilities = model.predict_proba(features_scaled)[0]
         ai_probability = probabilities[1]
 
-        # Threshold tuning (adjust if needed)
-        threshold = 0.6
-
+        threshold = 0.55
         is_ai = ai_probability > threshold
 
         confidence = round(
@@ -161,9 +186,9 @@ async def detect_voice(
         )
 
         explanation = (
-            "Model detected synthetic acoustic patterns."
+            "Detected synthetic acoustic patterns and reduced natural vocal variability."
             if is_ai else
-            "Model detected natural human vocal characteristics."
+            "Detected natural human vocal dynamics and organic speech variations."
         )
 
         return {
@@ -180,9 +205,9 @@ async def detect_voice(
             detail={"status": "error", "message": str(e)}
         )
 
-# ---------------------------
-# Run Server
-# ---------------------------
+# =====================================
+# RUN SERVER
+# =====================================
 
 if __name__ == "__main__":
     import uvicorn
