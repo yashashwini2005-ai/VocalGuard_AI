@@ -55,18 +55,71 @@ All features are normalized and fixed to 4-second duration audio clips at 22050 
 
 
 
-## 🏗️ Project Architecture
+🏗️ VocalGuard AI — Project Architecture
+🔷 1️⃣ High-Level System Architecture
+                ┌─────────────────────────────┐
+                │        Client / User        │
+                │  (Frontend / Postman / CLI) │
+                └──────────────┬──────────────┘
+                               │
+                               ▼
+                ┌─────────────────────────────┐
+                │        FastAPI Server       │
+                │         (main.py)           │
+                │  - API Key Validation       │
+                │  - Request Validation       │
+                │  - Feature Extraction       │
+                └──────────────┬──────────────┘
+                               │
+                               ▼
+                ┌─────────────────────────────┐
+                │   Feature Engineering Layer │
+                │  (Librosa + NumPy)          │
+                │  - MFCC (40)                │
+                │  - Delta Coefficients       │
+                │  - Spectral Features        │
+                │  - Chroma                   │
+                │  - Contrast                 │
+                │  - Tonnetz                  │
+                └──────────────┬──────────────┘
+                               │
+                               ▼
+                ┌─────────────────────────────┐
+                │  StandardScaler (Sklearn)   │
+                │  (english_scaler.pkl)       │
+                └──────────────┬──────────────┘
+                               │
+                               ▼
+                ┌─────────────────────────────┐
+                │ RandomForestClassifier      │
+                │ (english_voice_model.pkl)   │
+                └──────────────┬──────────────┘
+                               │
+                               ▼
+                ┌─────────────────────────────┐
+                │ JSON Response               │
+                │ - HUMAN / AI_GENERATED     │
+                │ - Confidence Score          │
+                │ - Explanation               │
+                └─────────────────────────────┘
 
-VocalGuard_AI/
-│
-├── main.py # FastAPI inference server
-├── train_model.py # Model training script
-├── test_api.py # Batch API tester
-├── convert_to_base64.py # Audio encoding utility
-├── requirements.txt # Dependencies
-├── runtime.txt # Python runtime version
-├── README.md # Documentation
-└── .gitignore # Ignored files
+
+🌐 API Architecture (FastAPI Layer)
+Endpoint:
+POST /api/voice-detection
+
+
+Request Flow:
+Receive Base64 audio
+Decode to waveform
+Resample to 22050 Hz
+Trim silence
+Fix duration to 4 seconds
+Extract 218 features
+Scale features
+Predict probabilities
+Apply threshold (0.55)
+Return JSON response
 
 
 

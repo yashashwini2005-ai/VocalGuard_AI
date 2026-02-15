@@ -16,7 +16,7 @@ dataset/
 *.zip
 
 # Model files
-*.pkl
+
 *.h5
 
 # Generated / Temp files
