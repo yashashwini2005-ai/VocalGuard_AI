@@ -53,7 +53,7 @@ All features are normalized and fixed to 4-second duration audio clips at 22050 
 | Feature Count | 218 |
 | Model Type | RandomForestClassifier |
 
----
+
 
 ## 🏗️ Project Architecture
 
@@ -69,13 +69,10 @@ VocalGuard_AI/
 └── .gitignore # Ignored files
 
 
----
 
 ## ⚙️ Setup Instructions
 
 ### 1️⃣ Clone Repository
-
-```bash
 git clone https://github.com/yashashwini2005-ai/VocalGuard_AI.git
 cd VocalGuard_AI
 
