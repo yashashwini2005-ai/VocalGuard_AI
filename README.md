@@ -1,124 +1,182 @@
-📌 Project Overview
+# 🎙️ VocalGuard AI  
+### AI Voice Detection System using Classical Machine Learning
 
-VocalGuard AI is a machine learning–based REST API that detects whether an audio sample is:
-AI-generated (synthetic speech)
-Real human speech
-The system is language-agnostic and works across multiple languages by analyzing acoustic forensic features instead of text content.
+VocalGuard AI is a production-ready voice authenticity detection system that classifies whether an audio clip is **Human** or **AI-Generated** using acoustic feature engineering and a RandomForest ensemble model.
 
-This solution addresses risks related to:
-Voice-based fraud
-Deepfake impersonation
-Scam detection
-Synthetic media verification
-Audio forensics
+The system is built with Python, Librosa, Scikit-learn, and FastAPI, and achieves **~91% validation F1-score** and **~97.7% real-world API accuracy**.
 
-🧠 How It Works
+---
 
-The system processes Base64-encoded audio and performs:
-Audio Decoding & Normalization
-Acoustic Feature Extraction
-Pitch mean & variance
-MFCC (Mel-Frequency Cepstral Coefficients)
-Spectral centroid
-RMS energy variation
-Zero-crossing rate
-Machine Learning Classification
-Logistic Regression
-StandardScaler normalization
-Probabilistic output
-Structured JSON Response
+## 🚀 Key Features
 
-The model was trained on:
+- 🎧 AI vs Human Voice Classification
+- 📊 218-Dimensional Acoustic Feature Extraction
+- 🌲 RandomForest Ensemble Model
+- ⚡ FastAPI Production API
+- 🔐 API Key Authentication
+- 📦 Clean GitHub-ready architecture
+- 🧪 Batch Testing Support
 
-Real speech samples (LibriSpeech)
-AI-generated speech samples (ElevenLabs)
+---
 
-🚀 API Specification
-Endpoint
-POST /api/voice-detection
+## 🧠 Model Overview
 
-Headers
-x-api-key: sk_live_vocalguard_2026
-Content-Type: application/json
+### 📌 Dataset
+- ~2000 balanced English audio samples
+  - 1001 Real voices
+  - 1000 AI-generated voices
 
-Request Body
-{
-"language": "English",
-"audioFormat": "wav",
-"audioBase64": "<FULL_BASE64_AUDIO_STRING>"
-}
+### 📌 Feature Engineering (218 Features)
+Extracted using Librosa:
 
-Response Example
-{
-"status": "success",
-"language": "English",
-"classification": "AI_GENERATED",
-"confidenceScore": 0.87,
-"explanation": "ML model detected synthetic acoustic patterns."
-}
+- 40 MFCCs (mean + std)
+- Delta coefficients
+- Spectral Centroid
+- Spectral Rolloff
+- Spectral Bandwidth
+- Zero Crossing Rate
+- Chroma Features
+- Spectral Contrast
+- Tonnetz Features
 
-🛠️ Run Locally
-Prerequisites
+All features are normalized and fixed to 4-second duration audio clips at 22050 Hz.
 
-Python 3.10+
+---
 
-pip
+## 📈 Model Performance
 
-1️⃣ Install Dependencies
-pip install -r requirements.txt
+| Metric | Value |
+|--------|-------|
+| Validation Accuracy | ~90.8% |
+| F1-Score | ~0.91 |
+| API Batch Accuracy | **97.7%** |
+| Feature Count | 218 |
+| Model Type | RandomForestClassifier |
 
-2️⃣ Start the Server
-uvicorn main:app --reload
+---
 
-Server will run at:
+## 🏗️ Project Architecture
 
-http://127.0.0.1:8000
-
-Swagger documentation:
-
-http://127.0.0.1:8000/docs
-
-3️⃣ Test the API
-
-Use the included testing script:
-python test_api.py
-Or use Swagger UI to manually send Base64 audio.
-
-📊 Model Details
-
-Model: Logistic Regression
-Feature Scaling: StandardScaler
-Training Strategy: Balanced dataset (Real vs AI)
-Output: Probabilistic classification
-
-📁 Project Structure
 VocalGuard_AI/
 │
-├── main.py
-├── train_model.py
-├── test_api.py
-├── voice_model.pkl
-├── scaler.pkl
-├── requirements.txt
-├── README.md
-└── .gitignore
+├── main.py # FastAPI inference server
+├── train_model.py # Model training script
+├── test_api.py # Batch API tester
+├── convert_to_base64.py # Audio encoding utility
+├── requirements.txt # Dependencies
+├── runtime.txt # Python runtime version
+├── README.md # Documentation
+└── .gitignore # Ignored files
 
-⚠️ Limitations
 
-Very short audio (<2 seconds) may reduce confidence.
+---
 
-Extremely high-quality synthetic voices may resemble human speech.
+## ⚙️ Setup Instructions
 
-Noisy environments can affect acoustic feature extraction.
+### 1️⃣ Clone Repository
 
-🏆 Applications
+```bash
+git clone https://github.com/yashashwini2005-ai/VocalGuard_AI.git
+cd VocalGuard_AI
 
-Fraud prevention
 
-Scam call detection
+2️⃣ Create Virtual Environment (Python 3.10 Recommended)
+py -3.10 -m venv venv
+venv\Scripts\activate
 
-Deepfake voice verification
+3️⃣ Install Dependencies
+pip install -r requirements.txt
 
-AI compliance monitoring
 
-Media authenticity verification
+📊 Train the Model
+Place dataset in:
+dataset/English/Real
+dataset/English/Fake
+
+
+Then run:
+python train_model.py
+This generates:
+english_voice_model.pkl
+english_scaler.pkl
+
+
+🌐 Run the API
+http://127.0.0.1:8000/docs
+
+
+Access:
+http://127.0.0.1:8000/docs
+
+Swagger UI will open automatically.
+
+
+📡 API Endpoint
+POST /api/voice-detection
+
+Request JSON:
+{
+  "language": "English",
+  "audioFormat": "wav",
+  "audioBase64": "BASE64_STRING"
+}
+Response:
+{
+  "status": "success",
+  "language": "English",
+  "classification": "AI_GENERATED",
+  "confidenceScore": 0.947,
+  "explanation": "Detected synthetic acoustic patterns and reduced natural vocal variability."
+}
+
+
+🧪 Batch Testing
+To test entire folder:
+python test_api.py
+
+Example Result:
+Total Tested : 1000
+Correct      : 977
+Accuracy     : 97.7%
+
+
+
+🔐 Security
+API Key authentication required
+CORS enabled for development
+Production-ready structure
+
+
+
+🛠️ Technologies Used
+Python 3.10
+Librosa
+NumPy
+Scikit-learn
+FastAPI
+Uvicorn
+Joblib
+
+
+
+🎯 Future Improvements
+Multi-language expansion
+Deep learning model integration
+Explainable AI feature importance dashboard
+Cloud deployment (Render / AWS / GCP)
+Real-time streaming detection
+
+
+
+
+👩‍💻 Author
+
+Yashashwini
+AI & Machine Learning Developer
+GitHub: https://github.com/yashashwini2005-ai
+
+
+
+⭐ Project Goal
+
+VocalGuard AI aims to combat misinformation and deepfake voice misuse by providing a lightweight, scalable, and production-ready AI voice detection system.
