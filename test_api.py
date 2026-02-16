@@ -7,15 +7,10 @@ import sys
 # CONFIG
 # =====================================
 
-API_URL = "http://127.0.0.1:8000/api/voice-detection"
+API_URL = "https://YOUR_RAILWAY_URL.up.railway.app/api/voice-detection"
 API_KEY = "sk_live_vocalguard_2026"
 
-# 🔥 CHANGE THIS TO TEST
 AUDIO_FOLDER = "dataset/English/Fake"
-# Use:
-# "dataset/English/Fake"  → Test AI voices
-# "dataset/English/Real"  → Test Human voices
-
 LANGUAGE = "English"
 
 # =====================================
@@ -93,7 +88,8 @@ for file in files:
     }
 
     headers = {
-        "x-api-key": API_KEY
+        "x-api-key": API_KEY,
+        "Content-Type": "application/json"
     }
 
     try:
@@ -101,7 +97,7 @@ for file in files:
             API_URL,
             json=payload,
             headers=headers,
-            timeout=60
+            timeout=120
         )
 
         if response.status_code == 200:
